@@ -1,0 +1,97 @@
+---
+title: "Data + Desserts"
+output: github_document
+---
+
+### What does our data look like?
+```{r}
+library(YaleToolkit)
+df <- read.csv("sales.csv", stringsAsFactors = FALSE,
+               header = TRUE, blank.lines.skip = FALSE, as.is = TRUE)
+
+whatis(df) ## high level view of our data
+
+```
+
+A really powerful tool I like to use is sapply. Here we'll use it to create a frequency table of each column of the dataframe, and get a view for what our data looks like. 
+
+```{r}
+## excluding order_id and ordered_at to reduce noise
+sapply(names(df[,-c(1,3)]), function(x) table(df[x])) ## frequency tables of each column
+# sapply(names(df), function(x) table(df[x])) ## frequency tables of each column
+```
+We see a few problems from the getgo:
+
+* order_id is not unique
+* name includes product and flavors
+* price and line_total include "-" for prices
+* name includes empty strings
+
+Each section to follow will clean up what we found!
+
+### Removing Duplicate Rows
+```{r}
+df <- unique(df)
+```
+
+### Removing rows with no entries in name column
+```{r}
+no_name <- sapply(c(1:nrow(df)), ## identifying names that are empty strings
+                  function(x) nchar(df[x, "name"]) == 0) 
+df <- df[no_name == FALSE,] ## removed rows with no name
+```
+
+### Cleaning up price and line_total 
+* negative values
+* recreating line_total column
+```{r}
+df$price <- gsub("-", "", df$price)  ## removing - signs from prices
+df$price.f <- gsub("\\$", "", df$price) ## removing $ sign from prices
+df$price.f <- as.numeric(df$price.f)  ## turning char into numeric
+df$line_total <- df$price.f * df$quantity  ## recalculating line_total
+df$line_total.f <- df$line_total  ## creating column with float values
+df$line_total <- paste("$", df$line_total, sep = "")  ## returning to char
+## gets prices with change ie. $10.5 and adds a 0 to the end
+df$line_total[c(grep("\\.", df$line_total))] <- paste(df$line_total[c(grep("\\.",
+                                                      df$line_total))], "0", sep = "")
+## this gets the prices that dont have change ie. $3, and replaces with $3.00
+df$line_total[-c(grep("\\.", df$line_total))] <- paste(df$line_total[-c(grep("\\.",
+                                                df$line_total))], ".00", sep = "")  ## adding .00 to end of prices
+head(df)
+```
+
+### Making unique order_id's
+```{r}
+# order_id is not unique
+df$order_id <- c(1:nrow(df))  ## replacing with unique numbers [1:27903]
+length(unique(df$order_id))
+```
+
+### Cleaning up name column
+* product column
+* name (flavor) column
+```{r, warning=FALSE}
+x <- data.frame(t(sapply(df$name, function(y) strsplit(y,split="\" ")[[1]])))
+names(x) <- c("product", "name")  ## renaming col names
+x$product <- gsub("\"", "", x$product) ## removing any quotes from products 
+df <- df[,-which(names(df) %in% "name")]  ## removing old name column (programatically)
+df <- cbind(df, x)  ## adding new cols to og df
+df$name <- as.character(df$name)
+head(df)
+#sapply(names(df), function(x) table(df[x])) ## frequency tables of each column 
+```
+
+### Barplots
+
+```{r}
+#### icecream profits barplot ordered by greatest to least $$
+p <- tapply(df$line_total.f, df$name, sum) ## total profit by flavor
+p <- p[order(p, decreasing = TRUE)]  ## ordering least to greatest
+barplot(p, main = "Ice Cream Profits", las = 2, col = rainbow(length(names(table(df$name)))))
+```
+```{r}
+## product profits ordered by greatest to least $$
+c <- tapply(df$line_total.f, df$product, sum) ## total profit by flavor
+c <- c[order(c, decreasing = TRUE)]  ## ordering least to greatest
+barplot(c, main = "Product Profits", las = 2, col = rainbow(length(names(table(df$product)))))
+```
