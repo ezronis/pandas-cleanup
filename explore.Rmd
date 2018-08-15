@@ -1,5 +1,7 @@
 ---
 title: "Data + Desserts"
+author: "Shylee Ezroni"
+date: August 16, 2018
 output: github_document
 ---
 
